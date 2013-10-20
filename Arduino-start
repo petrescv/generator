@@ -1,0 +1,78 @@
+#define pinAlarma 5
+#define pinStart 6
+#define pinOn 7
+#define pinBatt 1
+#define pinGenerator 9
+
+int tensiuneBatt;
+int incercariStart;
+boolean reset = 0;
+boolean incarcat;
+
+//****SETUP AREA****==============================================
+
+#define pragStartIncarcare 40 //pragul inferior (v)
+#define pragStopIncarcare 50 //pragul superior (v)
+#define timpStart 2000 // cheie start 2 secunde
+#define timpAlarma 5000  //alarma dureaza 5 secunde
+#define startAlarma 5  //dupa 5 incercari de start nereusite porneste alarma
+#define timpResetAlarma 5000  //dupa 5 secunde se reseteaza singur
+#define scalareTensiune 0.052311901504788 //baza 0-1023 biti adus in intervalul 0-65 v
+
+//****END OF SETUP AREA****======================================
+
+
+void setup() {
+
+  Serial.begin(9600);
+  pinMode(pinAlarma, OUTPUT);
+  pinMode(pinStart, OUTPUT);
+  pinMode(pinOn, OUTPUT);
+  pinMode(pinGenerator, INPUT);
+
+}
+
+void loop()
+{
+  if(incercariStart==startAlarma)
+  {
+    delay(timpResetAlarma);
+    reset=0;
+  }  //daca nu a venit nimeni sa dea reset la modul dupa pornirea alarmei, algoritmul mai incearca sa porneasca generatorul in speranta ca poate pleaca
+  incercariStart=0;
+  tensiuneBatt=analogRead(pinBatt)*scalareTensiune;  //conversie de la 10 biti la tensiunea reala
+  if(tensiuneBatt<=pragStartIncarcare)
+    incarcat=0;  //tine evidenta daca acumulatorii sunt incarcati sau nu 
+  while(tensiuneBatt<=pragStartIncarcare&&reset==0&&incarcat==0)
+  {
+    digitalWrite(pinOn, HIGH); //cat timp acumulatorii se afla sub pragul de incarcare, cupleaza contactul On al generatorului pentru a-l pregati de start
+    while(digitalRead(pinGenerator)==0&&incercariStart<startAlarma)
+    {
+      digitalWrite(pinStart, HIGH);  //cat timp generatorul
+      delay(timpStart);              //nu este pornit inca,
+      digitalWrite(pinStart, LOW);   //incearca sa-i dea Start
+      incercariStart++;
+      Serial.println(incercariStart);
+    }
+    if(incercariStart==startAlarma)
+    {
+      digitalWrite(pinAlarma, HIGH);  //daca nu a reusit sa-l porneasca,
+      delay(timpAlarma);              //cupleaza contactul de alarma
+      digitalWrite(pinAlarma, LOW);
+      digitalWrite(pinOn, LOW);
+      reset=1;
+    }
+    if(digitalRead(pinGenerator)==1)
+    {
+      tensiuneBatt=analogRead(pinBatt)*scalareTensiune;    //daca generatorul
+      while(tensiuneBatt<=pragStopIncarcare)               //a pornit cu succes,
+      {                                                    //incarca acumulatorii
+        digitalWrite(pinOn, HIGH);
+        tensiuneBatt=analogRead(pinBatt)*scalareTensiune;
+      }
+      digitalWrite(pinOn, LOW);
+      incarcat=1;  //tine evidenta ca este incarcat
+    }
+    digitalWrite(pinOn, LOW);  //dupa ce s-a incarcat sau a pornit alarma, opreste contactul de On al generatorului
+  }
+}
